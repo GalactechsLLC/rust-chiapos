@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::ops::Range;
 
 pub struct ChachaContext {
     pub input: [u32; 16],
@@ -10,17 +9,17 @@ const fn rol32(a: u32, n: u32) -> u32 {
 }
 
 const fn chacha_quarter_round(mut a: u32, mut b: u32, mut c: u32, mut d: u32) {
-    a += b;
-    d ^= a;
+    a = a.wrapping_add(b);
+    d = d.wrapping_pow(a);
     d = rol32(d, 16);
-    c += d;
-    b ^= c;
+    c = c.wrapping_add(d);
+    b = b.wrapping_pow(c);
     b = rol32(b, 12);
-    a += b;
-    d ^= a;
+    a = a.wrapping_add(b);
+    d = d.wrapping_pow(a);
     d = rol32(d, 8);
-    c += d;
-    b ^= c;
+    c = c.wrapping_add(d);
+    b = b.wrapping_pow(c);
     b = rol32(b, 7);
     let _ = b;
 }
@@ -85,7 +84,6 @@ pub fn chacha8_get_keystream(
     let mut x14: u32;
     let mut x15;
     let mut i;
-    let mut c = 0;
 
     let j0: u32 = context.input[0];
     let j1: u32 = context.input[1];
@@ -99,8 +97,8 @@ pub fn chacha8_get_keystream(
     let j9: u32 = context.input[9];
     let j10: u32 = context.input[10];
     let j11: u32 = context.input[11];
-    let mut j12: u32 = pos.to_le() as u32;
-    let mut j13: u32 = (pos.to_le() >> 32) as u32;
+    let mut j12: u32 = pos as u32;
+    let mut j13: u32 = (pos >> 32) as u32;
     let j14: u32 = context.input[14];
     let j15: u32 = context.input[15];
 
@@ -133,43 +131,42 @@ pub fn chacha8_get_keystream(
             chacha_quarter_round(x3, x4, x9, x14);
             i -= 2;
         }
-        x0 += j0;
-        x1 += j1;
-        x2 += j2;
-        x3 += j3;
-        x4 += j4;
-        x5 += j5;
-        x6 += j6;
-        x7 += j7;
-        x8 += j8;
-        x9 += j9;
-        x10 += j10;
-        x11 += j11;
-        x12 += j12;
-        x13 += j13;
-        x14 += j14;
-        x15 += j15;
+        x0 = j0;
+        x1 = x1.wrapping_add(j1);
+        x2 = x2.wrapping_add(j2);
+        x3 = x3.wrapping_add(j3);
+        x4 = x4.wrapping_add(j4);
+        x5 = x5.wrapping_add(j5);
+        x6 = x6.wrapping_add(j6);
+        x7 = x7.wrapping_add(j7);
+        x8 = x8.wrapping_add(j8);
+        x9 = x9.wrapping_add(j9);
+        x10 = x10.wrapping_add(j10);
+        x11 = x11.wrapping_add(j11);
+        x12 = x12.wrapping_add(j12);
+        x13 = x13.wrapping_add(j13);
+        x14 = x14.wrapping_add(j14);
+        x15 = x15.wrapping_add(j15);
         j12 = j12.wrapping_add(1);
         if j12 == 0 {
-            j13 += 1;
+            j13 = j13.wrapping_add(1);
         }
-        cypher_text.splice(Range::from(c + 0..c + 4), x0.to_le_bytes());
-        cypher_text.splice(Range::from(c + 4..c + 8), x1.to_le_bytes());
-        cypher_text.splice(Range::from(c + 8..c + 12), x2.to_le_bytes());
-        cypher_text.splice(Range::from(c + 12..c + 16), x3.to_le_bytes());
-        cypher_text.splice(Range::from(c + 16..c + 20), x4.to_le_bytes());
-        cypher_text.splice(Range::from(c + 20..c + 24), x5.to_le_bytes());
-        cypher_text.splice(Range::from(c + 24..c + 28), x6.to_le_bytes());
-        cypher_text.splice(Range::from(c + 28..c + 32), x7.to_le_bytes());
-        cypher_text.splice(Range::from(c + 32..c + 36), x8.to_le_bytes());
-        cypher_text.splice(Range::from(c + 36..c + 40), x9.to_le_bytes());
-        cypher_text.splice(Range::from(c + 40..c + 44), x10.to_le_bytes());
-        cypher_text.splice(Range::from(c + 44..c + 48), x11.to_le_bytes());
-        cypher_text.splice(Range::from(c + 48..c + 52), x12.to_le_bytes());
-        cypher_text.splice(Range::from(c + 52..c + 56), x13.to_le_bytes());
-        cypher_text.splice(Range::from(c + 56..c + 60), x14.to_le_bytes());
-        cypher_text.splice(Range::from(c + 60..c + 64), x15.to_le_bytes());
-        c += 64;
+        cypher_text.extend(x0.to_le_bytes());
+        cypher_text.extend(x1.to_le_bytes());
+        cypher_text.extend(x2.to_le_bytes());
+        cypher_text.extend(x3.to_le_bytes());
+        cypher_text.extend(x4.to_le_bytes());
+        cypher_text.extend(x5.to_le_bytes());
+        cypher_text.extend(x6.to_le_bytes());
+        cypher_text.extend(x7.to_le_bytes());
+        cypher_text.extend(x8.to_le_bytes());
+        cypher_text.extend(x9.to_le_bytes());
+        cypher_text.extend(x10.to_le_bytes());
+        cypher_text.extend(x11.to_le_bytes());
+        cypher_text.extend(x12.to_le_bytes());
+        cypher_text.extend(x13.to_le_bytes());
+        cypher_text.extend(x14.to_le_bytes());
+        cypher_text.extend(x15.to_le_bytes());
         n_blocks -= 1;
     }
 }

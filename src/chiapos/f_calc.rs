@@ -1,7 +1,6 @@
+use crate::chiapos::bitvec::BitVec;
 use crate::chiapos::chacha8::{chacha8_get_keystream, chacha8_keysetup, ChachaContext};
-use crate::chiapos::utils::{bit_vec_slice, bit_vec_slice_to_int};
 use crate::chiapos::verifier::PlotEntry;
-use bit_vec::BitVec;
 use lazy_static::lazy_static;
 use std::cmp::min;
 use std::error::Error;
@@ -72,23 +71,23 @@ impl F1Calculator {
         // First byte is 1, the index of this table
         let mut enc_key: [u8; 32] = [0; 32];
         enc_key[0] = 1;
-        enc_key[1..].clone_from_slice(&orig_key[1..]);
+        enc_key[1..].clone_from_slice(&orig_key[0..31]);
         // Setup ChaCha8 context with zero-filled IV
         chacha8_keysetup(&mut self.enc_ctx_, &enc_key, None)?;
         Ok(())
     }
-    pub fn calculate_f(&self, l: &BitVec) -> Result<BitVec, Box<dyn Error>> {
+    pub fn calculate_f(&self, l: &BitVec) -> BitVec {
         let num_output_bits = self.k as u16;
         let block_size_bits = K_F1_BLOCK_SIZE_BITS;
 
         // Calculates the counter that will be used to get ChaCha8 keystream.
         // Since k < block_size_bits, we can fit several k bit blocks into one
         // ChaCha8 block.
-        let counter_bit: u128 = (bit_vec_slice_to_int(l, 0, 4)? * num_output_bits as u64) as u128;
+        let counter_bit: u128 = (l.get_value().unwrap() * num_output_bits as u64) as u128;
         let mut counter: u64 = (counter_bit / block_size_bits as u128) as u64;
 
         // How many bits are before L, in the current block
-        let bits_before_l: usize = (counter_bit % block_size_bits as u128) as usize;
+        let bits_before_l: u32 = (counter_bit % block_size_bits as u128) as u32;
 
         // How many bits of L are in the current block (the rest are in the next block)
         let bits_of_l = min(block_size_bits - bits_before_l as u16, num_output_bits);
@@ -105,40 +104,37 @@ impl F1Calculator {
         // encrypting plaintext at a given offset, but we have no
         // plaintext, so no XORing at the end.
         chacha8_get_keystream(&self.enc_ctx_, counter, 1, &mut ciphertext_bytes);
-        let ciphertext0: BitVec = BitVec::from_bytes(&ciphertext_bytes); //(ciphertext_bytes, block_size_bits / 8, block_size_bits);
+        let ciphertext0: BitVec = BitVec::from_be_bytes(
+            ciphertext_bytes.clone(),
+            (block_size_bits / 8) as u32,
+            block_size_bits as u32,
+        );
 
         if spans_two_blocks {
             // Performs another encryption if necessary
             counter += 1;
             chacha8_get_keystream(&self.enc_ctx_, counter, 1, &mut ciphertext_bytes);
-            let ciphertext1: BitVec = BitVec::from_bytes(ciphertext_bytes.as_slice());
-            output_bits = bit_vec_slice(&ciphertext0, bits_before_l, ciphertext0.len());
-            output_bits.extend(bit_vec_slice(
-                &ciphertext1,
-                0,
-                (num_output_bits - bits_of_l).into(),
-            ));
-        } else {
-            output_bits = bit_vec_slice(
-                &ciphertext0,
-                bits_before_l,
-                (bits_before_l + num_output_bits as usize).into(),
+            let ciphertext1: BitVec = BitVec::from_be_bytes(
+                ciphertext_bytes.clone(),
+                ciphertext_bytes.len() as u32,
+                (ciphertext_bytes.len() * 8) as u32,
             );
+            output_bits = ciphertext0.slice(bits_before_l)
+                + ciphertext1.range(0, (num_output_bits - bits_of_l).into());
+        } else {
+            output_bits = ciphertext0.range(bits_before_l, bits_before_l + num_output_bits as u32);
         }
 
         // Adds the first few bits of L to the end of the output, production k + kExtraBits of output
-        let mut extra_data = bit_vec_slice(l, 0, K_EXTRA_BITS.into());
-        if extra_data.len() < K_EXTRA_BITS.into() {
-            extra_data.extend(BitVec::from_elem(
-                K_EXTRA_BITS as usize - extra_data.len(),
-                false,
-            ));
+        let mut extra_data = l.range(0, K_EXTRA_BITS.into());
+        if extra_data.get_size() < K_EXTRA_BITS.into() {
+            extra_data += BitVec::new(0, K_EXTRA_BITS as u32 - extra_data.get_size());
         }
-        output_bits.extend(extra_data);
-        return Ok(output_bits);
+        output_bits += extra_data;
+        return output_bits;
     }
-    pub fn calculate_bucket(&self, l: &BitVec) -> Result<(BitVec, BitVec), Box<dyn Error>> {
-        return Ok((self.calculate_f(l)?, l.clone()));
+    pub fn calculate_bucket(&self, l: &BitVec) -> (BitVec, BitVec) {
+        return (self.calculate_f(l), l.clone());
     }
 }
 
@@ -173,10 +169,10 @@ impl FXCalculator {
         l: &BitVec,
         r: &BitVec,
     ) -> Result<(BitVec, BitVec), Box<dyn Error>> {
-        let mut input: BitVec = BitVec::new();
-        input.extend(y1);
-        input.extend(l);
-        input.extend(r);
+        let mut input: BitVec = BitVec::new(0, 0);
+        input += y1;
+        input += l;
+        input += r;
 
         let mut hasher = blake3::Hasher::new();
         hasher.update(input.to_bytes().as_slice());
@@ -185,26 +181,36 @@ impl FXCalculator {
 
         let f = u64::from_be_bytes(hash_bytes[0..8].try_into()?) >> (64 - (self.k + K_EXTRA_BITS));
 
-        let mut c: BitVec = BitVec::new();
+        let mut c: BitVec = BitVec::new(0, 0);
         if self.table_index < 4 {
             // c is already computed
-            c.extend(l);
-            c.extend(r);
+            c += l;
+            c += r;
         } else if self.table_index < 7 {
             let len = K_VECTOR_LENS[(self.table_index + 1) as usize];
             let start_byte = ((self.k + K_EXTRA_BITS) / 8) as usize;
             let end_bit = (self.k + K_EXTRA_BITS + self.k * len) as usize;
             let end_byte = cdiv(end_bit as i32, 8 as i32) as usize;
-            c.extend(&BitVec::from_bytes(
-                &hash_bytes[start_byte..end_byte - start_byte],
-            ));
-            c = bit_vec_slice(
-                &c,
-                ((self.k + K_EXTRA_BITS) % 8) as usize,
-                (end_bit - start_byte * 8) as usize,
+            let hash_bytes = &hash_bytes[start_byte..end_byte - start_byte];
+            c += BitVec::from_be_bytes(
+                hash_bytes.to_vec(),
+                hash_bytes.len() as u32,
+                (hash_bytes.len() * 8) as u32,
+            );
+            c = c.range(
+                ((self.k + K_EXTRA_BITS) % 8) as u32,
+                (end_bit - start_byte * 8) as u32,
             );
         }
-        Ok((BitVec::from_bytes(&f.to_le_bytes()), c))
+        let f_bytes = &f.to_le_bytes();
+        Ok((
+            BitVec::from_be_bytes(
+                f_bytes.to_vec(),
+                f_bytes.len() as u32,
+                (f_bytes.len() * 8) as u32,
+            ),
+            c,
+        ))
     }
     pub fn find_matches(
         &mut self,
