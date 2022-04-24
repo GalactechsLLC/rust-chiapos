@@ -4,24 +4,23 @@ pub struct ChachaContext {
     pub input: [u32; 16],
 }
 
-const fn rol32(a: u32, n: u32) -> u32 {
+fn rol32(a: u32, n: u32) -> u32 {
     ((a) << (n)) | ((a) >> (32 - (n)))
 }
 
-const fn chacha_quarter_round(mut a: u32, mut b: u32, mut c: u32, mut d: u32) {
-    a = a.wrapping_add(b);
-    d = d.wrapping_pow(a);
-    d = rol32(d, 16);
-    c = c.wrapping_add(d);
-    b = b.wrapping_pow(c);
-    b = rol32(b, 12);
-    a = a.wrapping_add(b);
-    d = d.wrapping_pow(a);
-    d = rol32(d, 8);
-    c = c.wrapping_add(d);
-    b = b.wrapping_pow(c);
-    b = rol32(b, 7);
-    let _ = b;
+fn chacha_quarter_round(a: &mut u32, b: &mut u32, c: &mut u32, d: &mut u32) {
+    *a = a.wrapping_add(*b);
+    *d ^= *a;
+    *d = d.rotate_left(16);
+    *c = c.wrapping_add(*d);
+    *b ^= *c;
+    *b = b.rotate_left(12);
+    *a = a.wrapping_add(*b);
+    *d ^= *a;
+    *d = d.rotate_left(8);
+    *c = c.wrapping_add(*d);
+    *b ^= *c;
+    *b = b.rotate_left(7);
 }
 
 pub fn chacha8_keysetup(
@@ -121,17 +120,17 @@ pub fn chacha8_get_keystream(
         x15 = j15;
         i = 8;
         while i > 0 {
-            chacha_quarter_round(x0, x4, x8, x12);
-            chacha_quarter_round(x1, x5, x9, x13);
-            chacha_quarter_round(x2, x6, x10, x14);
-            chacha_quarter_round(x3, x7, x11, x15);
-            chacha_quarter_round(x0, x5, x10, x15);
-            chacha_quarter_round(x1, x6, x11, x12);
-            chacha_quarter_round(x2, x7, x8, x13);
-            chacha_quarter_round(x3, x4, x9, x14);
+            chacha_quarter_round(&mut x0, &mut x4, &mut x8, &mut x12);
+            chacha_quarter_round(&mut x1, &mut x5, &mut x9, &mut x13);
+            chacha_quarter_round(&mut x2, &mut x6, &mut x10, &mut x14);
+            chacha_quarter_round(&mut x3, &mut x7, &mut x11, &mut x15);
+            chacha_quarter_round(&mut x0, &mut x5, &mut x10, &mut x15);
+            chacha_quarter_round(&mut x1, &mut x6, &mut x11, &mut x12);
+            chacha_quarter_round(&mut x2, &mut x7, &mut x8, &mut x13);
+            chacha_quarter_round(&mut x3, &mut x4, &mut x9, &mut x14);
             i -= 2;
         }
-        x0 = j0;
+        x0 = x0.wrapping_add(j0);
         x1 = x1.wrapping_add(j1);
         x2 = x2.wrapping_add(j2);
         x3 = x3.wrapping_add(j3);

@@ -14,16 +14,16 @@ pub fn get_quality_string(
     quality_index: u16,
     challenge: &Vec<u8>,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    let mut proof =
+    let mut proof_bits =
         BitVec::from_be_bytes(proof.clone(), proof.len() as u32, (proof.len() * 8) as u32);
-    let mut table_index: u8 = 0;
+    let mut table_index: u8 = 1;
     while table_index < 7 {
         let mut new_proof: BitVec = BitVec::new(0, 0);
-        let size: u16 = (k * (1 << (table_index - 1))) as u16;
+        let size: u16 = k as u16 * (1 << (table_index - 1)) as u16;
         let mut j = 0;
         while j < (1 << (7 - table_index)) {
-            let mut left = proof.range((j * size) as u32, ((j + 1) * size) as u32);
-            let mut right = proof.range(((j + 1) * size) as u32, ((j + 2) * size) as u32);
+            let mut left = proof_bits.range((j * size) as u32, ((j + 1) * size) as u32);
+            let mut right = proof_bits.range(((j + 1) * size) as u32, ((j + 2) * size) as u32);
             if compare_proof_bits(&left, &right, k)? {
                 left += right;
                 new_proof += left;
@@ -33,13 +33,13 @@ pub fn get_quality_string(
             }
             j += 2;
         }
-        proof = new_proof;
+        proof_bits = new_proof;
         table_index += 1;
     }
     // Hashes two of the x values, based on the quality index
     let mut to_hash = challenge.clone();
     to_hash.extend(
-        proof
+        proof_bits
             .range(
                 (k as u16 * quality_index) as u32,
                 (k as u16 * (quality_index + 2)) as u32,
@@ -89,12 +89,7 @@ pub fn validate_proof(
     while index < 64 {
         let as_int =
             proof_bits.slice_to_int(k as u32 * index as u32, k as u32 * (index as u32 + 1));
-        let int_bytes = &as_int.to_be_bytes();
-        proof.push(BitVec::from_be_bytes(
-            int_bytes.to_vec(),
-            int_bytes.len() as u32,
-            (int_bytes.len() * 8) as u32,
-        ));
+        proof.push(BitVec::new(as_int as u128, k as u32));
         index += 1;
     }
 
@@ -131,12 +126,8 @@ pub fn validate_proof(
                 right_metadata: 0,
             };
 
-            l_plot_entry.y = BigUint::from_bytes_be(ys[index as usize].to_bytes().as_slice())
-                .to_u64()
-                .unwrap();
-            r_plot_entry.y = BigUint::from_bytes_be(ys[index as usize + 1].to_bytes().as_slice())
-                .to_u64()
-                .unwrap();
+            l_plot_entry.y = ys[index as usize].get_value().unwrap();
+            r_plot_entry.y = ys[index as usize + 1].get_value().unwrap();
             let bucket_l: Vec<&PlotEntry> = vec![&l_plot_entry];
             let bucket_r: Vec<&PlotEntry> = vec![&r_plot_entry];
 
@@ -176,13 +167,11 @@ pub fn validate_proof(
         challenge.len() as u32,
         (challenge.len() * 8) as u32,
     );
-    let quality_index = (u64::from_be_bytes(
-        challenge_bits
-            .range(256 - 5, challenge_bits.get_size())
-            .to_bytes()
-            .as_slice()
-            .try_into()?,
-    ) << 1) as u16;
+    let quality_index = (challenge_bits
+        .range(256 - 5, challenge_bits.get_size())
+        .get_value()
+        .unwrap()
+        << 1) as u16;
 
     // Makes sure the output is equal to the first k bits of the challenge
     if challenge_bits.range(0, k as u32) == ys[0].range(0, k as u32) {
@@ -204,7 +193,7 @@ fn compare_proof_bits(left: &BitVec, right: &BitVec, k: u8) -> Result<bool, Box<
         return Err("Right and Left are not Equal".into());
     }
     let mut i = size - 1;
-    while i > 0 {
+    while i >= 0 {
         let left_val = left.range(k as u32 * i, k as u32 * (i + 1));
         let right_val = right.range(k as u32 * i, k as u32 * (i + 1));
         if left_val < right_val {

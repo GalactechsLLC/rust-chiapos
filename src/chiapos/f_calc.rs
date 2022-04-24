@@ -8,6 +8,9 @@ use std::error::Error;
 const fn cdiv(a: i32, b: i32) -> i32 {
     return (a + b - 1) / b;
 }
+const fn ucdiv(a: u32, b: u32) -> u32 {
+    return (a + b - 1) / b;
+}
 
 // ChaCha8 block size
 const K_F1_BLOCK_SIZE_BITS: u16 = 512;
@@ -27,10 +30,10 @@ const K_C: u16 = 127;
 pub const K_BC: u16 = K_B * K_C;
 
 const K_VECTOR_LENS: [u8; 8] = [0, 0, 1, 2, 4, 4, 3, 2];
-
-fn load_tables() -> [[[u16; K_EXTRA_BITS_POW as usize]; K_BC as usize]; 2] {
-    let mut table: [[[u16; K_EXTRA_BITS_POW as usize]; K_BC as usize]; 2] =
-        [[[0; K_EXTRA_BITS_POW as usize]; K_BC as usize]; 2];
+//[[[u16; K_EXTRA_BITS_POW as usize]; K_BC as usize]; 2]
+fn load_tables() -> Vec<Vec<Vec<u16>>> {
+    let mut table: Vec<Vec<Vec<u16>>> =
+        vec![vec![vec![0; K_EXTRA_BITS_POW as usize]; K_BC as usize]; 2];
     let mut parity = 0;
     while parity < 2 {
         let mut i = 0;
@@ -51,7 +54,7 @@ fn load_tables() -> [[[u16; K_EXTRA_BITS_POW as usize]; K_BC as usize]; 2] {
 }
 
 lazy_static! {
-    static ref L_TARGETS: [[[u16; K_EXTRA_BITS_POW as usize]; K_BC as usize]; 2] = load_tables();
+    static ref L_TARGETS: Vec<Vec<Vec<u16>>> = load_tables();
 }
 
 pub struct F1Calculator {
@@ -113,6 +116,7 @@ impl F1Calculator {
         if spans_two_blocks {
             // Performs another encryption if necessary
             counter += 1;
+            ciphertext_bytes.clear();
             chacha8_get_keystream(&self.enc_ctx_, counter, 1, &mut ciphertext_bytes);
             let ciphertext1: BitVec = BitVec::from_be_bytes(
                 ciphertext_bytes.clone(),
@@ -138,6 +142,7 @@ impl F1Calculator {
     }
 }
 
+#[derive(Clone, Debug)]
 struct RmapItem {
     pub count: u16,
     pub pos: u16,
@@ -159,7 +164,7 @@ impl FXCalculator {
         FXCalculator {
             k,
             table_index,
-            rmap: vec![],
+            rmap: vec![RmapItem { count: 0, pos: 0 }; K_BC as usize],
             rmap_clean: vec![],
         }
     }
@@ -175,7 +180,9 @@ impl FXCalculator {
         input += r;
 
         let mut hasher = blake3::Hasher::new();
-        hasher.update(input.to_bytes().as_slice());
+        let input_bytes = input.to_bytes();
+        let byte_len = ucdiv(input.get_size(), 8);
+        hasher.update(&input_bytes[0..byte_len as usize]);
         let hash = hasher.finalize();
         let hash_bytes = hash.as_bytes();
 
@@ -191,26 +198,17 @@ impl FXCalculator {
             let start_byte = ((self.k + K_EXTRA_BITS) / 8) as usize;
             let end_bit = (self.k + K_EXTRA_BITS + self.k * len) as usize;
             let end_byte = cdiv(end_bit as i32, 8 as i32) as usize;
-            let hash_bytes = &hash_bytes[start_byte..end_byte - start_byte];
-            c += BitVec::from_be_bytes(
-                hash_bytes.to_vec(),
-                hash_bytes.len() as u32,
-                (hash_bytes.len() * 8) as u32,
+            c = BitVec::from_be_bytes(
+                hash_bytes[start_byte..end_byte].to_vec(),
+                (end_byte - start_byte) as u32,
+                ((end_byte - start_byte) * 8) as u32,
             );
             c = c.range(
                 ((self.k + K_EXTRA_BITS) % 8) as u32,
                 (end_bit - start_byte * 8) as u32,
             );
         }
-        let f_bytes = &f.to_le_bytes();
-        Ok((
-            BitVec::from_be_bytes(
-                f_bytes.to_vec(),
-                f_bytes.len() as u32,
-                (f_bytes.len() * 8) as u32,
-            ),
-            c,
-        ))
+        Ok((BitVec::new(f as u128, (self.k + K_EXTRA_BITS) as u32), c))
     }
     pub fn find_matches(
         &mut self,

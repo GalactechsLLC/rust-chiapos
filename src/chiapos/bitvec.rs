@@ -1,6 +1,10 @@
 use std::cmp::Ordering;
 use std::ops;
 
+const fn ucdiv(a: u32, b: u32) -> u32 {
+    return (a + b - 1) / b;
+}
+
 #[derive(Clone)]
 pub struct BitVec {
     values: Vec<u64>,
@@ -233,7 +237,10 @@ impl BitVec {
             rtn.extend(self.values[i].to_be_bytes());
             i += 1;
         }
-        rtn.extend((self.values[i] << (64 - self.last_size)).to_be_bytes());
+        let size = ucdiv(self.last_size, 8);
+        rtn.extend(
+            (self.values[i] << (64 - self.last_size)).to_be_bytes()[0..size as usize].to_vec(),
+        );
         rtn
     }
 
