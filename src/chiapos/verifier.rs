@@ -3,8 +3,6 @@ use crate::chiapos::f_calc::F1Calculator;
 use crate::chiapos::f_calc::FXCalculator;
 use crate::chiapos::f_calc::K_BC;
 use hex::encode;
-use num_bigint::BigUint;
-use num_traits::ToPrimitive;
 use sha2::{Digest, Sha256};
 use std::error::Error;
 
@@ -192,10 +190,10 @@ fn compare_proof_bits(left: &BitVec, right: &BitVec, k: u8) -> Result<bool, Box<
     if left.get_size() != right.get_size() {
         return Err("Right and Left are not Equal".into());
     }
-    let mut i = size - 1;
+    let mut i: i32 = size as i32 - 1;
     while i >= 0 {
-        let left_val = left.range(k as u32 * i, k as u32 * (i + 1));
-        let right_val = right.range(k as u32 * i, k as u32 * (i + 1));
+        let left_val = left.range(k as u32 * i as u32, k as u32 * (i + 1) as u32);
+        let right_val = right.range(k as u32 * i as u32, k as u32 * (i + 1) as u32);
         if left_val < right_val {
             return Ok(true);
         }

@@ -4,10 +4,6 @@ pub struct ChachaContext {
     pub input: [u32; 16],
 }
 
-fn rol32(a: u32, n: u32) -> u32 {
-    ((a) << (n)) | ((a) >> (32 - (n)))
-}
-
 fn chacha_quarter_round(a: &mut u32, b: &mut u32, c: &mut u32, d: &mut u32) {
     *a = a.wrapping_add(*b);
     *d ^= *a;
