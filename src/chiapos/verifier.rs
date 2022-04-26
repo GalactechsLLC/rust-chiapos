@@ -2,7 +2,6 @@ use crate::chiapos::bitvec::BitVec;
 use crate::chiapos::f_calc::F1Calculator;
 use crate::chiapos::f_calc::FXCalculator;
 use crate::chiapos::f_calc::K_BC;
-use hex::encode;
 use sha2::{Digest, Sha256};
 use std::error::Error;
 
@@ -63,13 +62,6 @@ pub fn validate_proof(
     challenge: &Vec<u8>,
     proof_bytes: &Vec<u8>,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    println!(
-        "Validating: id: ({}), K: {}, challenge: ({}), proof: {}",
-        encode(id.to_vec()),
-        k,
-        encode(challenge),
-        encode(proof_bytes)
-    );
     let proof_bits = BitVec::from_be_bytes(
         proof_bytes.clone(),
         proof_bytes.len() as u32,
