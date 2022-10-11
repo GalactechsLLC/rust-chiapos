@@ -125,12 +125,8 @@ pub fn validate_proof(
             let r_diff = r_plot_entry.y / K_BC as u64;
             let l_diff = l_plot_entry.y / K_BC as u64;
             let cdiff = r_diff - l_diff;
-            if cdiff != 1 {
+            if cdiff != 1 || f.find_matches(bucket_l, bucket_r, None, None) != 1 {
                 return Ok(Vec::new());
-            } else {
-                if f.find_matches(bucket_l, bucket_r, None, None) != 1 {
-                    return Ok(Vec::new());
-                }
             }
             let results = f.calculate_bucket(
                 &ys[index as usize],
@@ -143,7 +139,7 @@ pub fn validate_proof(
         }
 
         for new_y in &new_ys {
-            if new_y.get_size() <= 0 {
+            if new_y.get_size() == 0 {
                 return Ok(Vec::new());
             }
         }
@@ -166,14 +162,14 @@ pub fn validate_proof(
     // Makes sure the output is equal to the first k bits of the challenge
     if challenge_bits.range(0, k as u32) == ys[0].range(0, k as u32) {
         // Returns quality string, which requires changing proof to plot ordering
-        return Ok(get_quality_string(
+        Ok(get_quality_string(
             k,
             &proof_bits.to_bytes(),
             quality_index,
             &challenge,
-        )?);
+        )?)
     } else {
-        return Ok(Vec::new());
+        Ok(Vec::new())
     }
 }
 

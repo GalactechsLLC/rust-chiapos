@@ -6,10 +6,10 @@ use std::cmp::min;
 use std::error::Error;
 
 const fn cdiv(a: i32, b: i32) -> i32 {
-    return (a + b - 1) / b;
+    (a + b - 1) / b
 }
 const fn ucdiv(a: u32, b: u32) -> u32 {
-    return (a + b - 1) / b;
+    (a + b - 1) / b
 }
 
 // ChaCha8 block size
@@ -138,7 +138,7 @@ impl F1Calculator {
         return output_bits;
     }
     pub fn calculate_bucket(&self, l: &BitVec) -> (BitVec, BitVec) {
-        return (self.calculate_f(l), l.clone());
+        (self.calculate_f(l), l.clone())
     }
 }
 
@@ -261,6 +261,6 @@ impl FXCalculator {
             }
             pos_l += 1;
         }
-        return idx_count;
+        idx_count
     }
 }

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::ops;
 
 const fn ucdiv(a: u32, b: u32) -> u32 {
-    return (a + b - 1) / b;
+    (a + b - 1) / b
 }
 
 #[derive(Clone)]
@@ -19,7 +19,7 @@ impl BitVec {
         if size > 64 {
             // std::cout << "SPLITTING BitsGeneric" << std::endl;
             bits.init_bits((value >> 64) as u64, size - 64);
-            bits.append_value(value.into(), 64);
+            bits.append_value(value, 64);
         } else {
             bits.init_bits(value as u64, size);
         }
@@ -71,7 +71,7 @@ impl BitVec {
             bits.append_value(0, extra_space);
         }
         // Copy the Bits object element by element, and append it to the current Bits object.
-        if other.values.len() > 0 {
+        if !other.values.is_empty() {
             let mut index = 0;
             while index < other.values.len() {
                 bits.append_value(other.values[index].into(), 64);
@@ -134,8 +134,8 @@ impl BitVec {
         let end_bucket = end_index / 64;
         if start_bucket == end_bucket {
             // Positions inside the bucket.
-            start_index = start_index % 64;
-            end_index = end_index % 64;
+            start_index %= 64;
+            end_index %= 64;
             let bucket_size = if start_bucket as usize == (self.values.len() - 1) {
                 self.last_size
             } else {
@@ -144,11 +144,11 @@ impl BitVec {
             let mut val = self.values[start_bucket as usize];
             // Cut the prefix [0, start_index)
             if start_index != 0 {
-                val = val & ((1u64 << (bucket_size - start_index)) - 1);
+                val &= ((1u64 << (bucket_size - start_index)) - 1);
             }
             // Cut the suffix after end_index
-            val = val >> (bucket_size - end_index);
-            return BitVec::new(val.into(), end_index - start_index);
+            val >>= (bucket_size - end_index);
+            BitVec::new(val.into(), end_index - start_index)
         } else {
             let mut result = BitVec {
                 values: Vec::new(),
@@ -181,26 +181,20 @@ impl BitVec {
                 );
                 result.append_value(split.0.into(), end_index % 64);
             }
-            return result;
+            result
         }
     }
 
     pub fn slice_to_int(&self, start_index: u32, end_index: u32) -> u64 {
-        /*if (end_index > GetSize()) {
-            end_index = GetSize();
-        }
-        if (start_index < 0) {
-            start_index = 0;
-        } */
         if (start_index >> 6) == (end_index >> 6) {
             let mut res: u64 = self.values[(start_index >> 6) as usize];
             if (start_index >> 6) as usize == self.values.len() - 1 {
-                res = res >> (self.last_size - (end_index & 63));
+                res >>= self.last_size - (end_index & 63);
             } else {
-                res = res >> (64 - (end_index & 63));
+                res >>= 64 - (end_index & 63);
             }
-            res = res & ((1u64 << ((end_index & 63) - (start_index & 63))) - 1);
-            return res;
+            res &= ((1u64 << ((end_index & 63) - (start_index & 63))) - 1);
+            res
         } else {
             assert!((start_index >> 6) + 1 == (end_index >> 6));
             let mut split = self.split_number_by_prefix(
@@ -222,7 +216,7 @@ impl BitVec {
                 );
                 result = (result << (end_index & 63)) + split.0;
             }
-            return result;
+            result
         }
     }
 
@@ -278,15 +272,15 @@ impl BitVec {
             //Err("Number doesn't fit into a 64-bit type. {}", self.get_size());
             return None;
         }
-        return Some(self.values[0]);
+        Some(self.values[0])
     }
 
     pub fn get_size(&self) -> u32 {
-        if self.values.len() == 0 {
+        if self.values.is_empty() {
             return 0;
         }
         // Full buckets contain each 64 bits, last one contains only 'last_size_' bits.
-        return (self.values.len() as u32 - 1) * 64 + self.last_size;
+        (self.values.len() as u32 - 1) * 64 + self.last_size
     }
 
     fn append_value(&mut self, value: u128, length: u32) {
@@ -301,7 +295,7 @@ impl BitVec {
 
     fn do_append_value(&mut self, value: u64, length: u32) {
         // The last bucket is full or no bucket yet, create a new one.
-        if self.values.len() == 0 || self.last_size == 64 {
+        if self.values.is_empty() || self.last_size == 64 {
             self.values.push(value);
             self.last_size = length;
         } else {
@@ -343,7 +337,7 @@ impl BitVec {
         mask -= 1;
         let suffix = number & mask;
         let prefix = number >> suffix_size;
-        return (prefix, suffix);
+        (prefix, suffix)
     }
 
     fn get_size_bits(&self, value: u128) -> u8 {
@@ -353,7 +347,7 @@ impl BitVec {
             count += 1;
             val >>= 1;
         }
-        return count;
+        count
     }
 }
 impl ops::Add<BitVec> for BitVec {
@@ -361,7 +355,7 @@ impl ops::Add<BitVec> for BitVec {
 
     fn add(self, _rhs: BitVec) -> BitVec {
         let mut rtn = self.clone();
-        if _rhs.values.len() > 0 {
+        if !_rhs.values.is_empty() {
             let mut i = 0;
             while i < _rhs.values.len() - 1 {
                 rtn.append_value(_rhs.values[i] as u128, 64);
@@ -369,12 +363,12 @@ impl ops::Add<BitVec> for BitVec {
             }
             rtn.append_value(_rhs.values[_rhs.values.len() - 1] as u128, _rhs.last_size);
         }
-        return rtn;
+        rtn
     }
 }
 impl ops::AddAssign<BitVec> for BitVec {
     fn add_assign(&mut self, _rhs: BitVec) {
-        if _rhs.values.len() > 0 {
+        if !_rhs.values.is_empty() {
             let mut i = 0;
             while i < _rhs.values.len() - 1 {
                 self.append_value(_rhs.values[i] as u128, 64);
@@ -386,7 +380,7 @@ impl ops::AddAssign<BitVec> for BitVec {
 }
 impl ops::AddAssign<&BitVec> for BitVec {
     fn add_assign(&mut self, _rhs: &BitVec) {
-        if _rhs.values.len() > 0 {
+        if !_rhs.values.is_empty() {
             let mut i = 0;
             while i < _rhs.values.len() - 1 {
                 self.append_value(_rhs.values[i] as u128, 64);
@@ -408,7 +402,7 @@ impl PartialEq for BitVec {
             }
             i += 1;
         }
-        return true;
+        true
     }
 }
 impl Eq for BitVec {}
@@ -436,6 +430,6 @@ impl Ord for BitVec {
             }
             i += 1;
         }
-        return Ordering::Equal;
+        Ordering::Equal
     }
 }
